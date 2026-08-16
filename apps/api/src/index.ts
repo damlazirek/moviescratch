@@ -5,10 +5,13 @@ import cors from "cors";
 import express from "express";
 import { healthRouter } from "./routes/health.js";
 import { listsRouter } from "./routes/lists.js";
+import { moviesRouter } from "./routes/movies.js";
+import { getTmdbApiKey } from "./services/tmdb.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
-dotenv.config();
+// Root .env wins (tsx restarts can leave empty TMDB_API_KEY in process.env)
+dotenv.config({ path: path.resolve(__dirname, "../../../.env"), override: true });
+dotenv.config({ override: false });
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -19,7 +22,9 @@ app.use(express.json());
 
 app.use("/health", healthRouter);
 app.use("/lists", listsRouter);
+app.use("/movies", moviesRouter);
 
 app.listen(port, () => {
-  console.log(`[api] SCRATCH listening on http://localhost:${port}`);
+  const mode = getTmdbApiKey() ? "TMDB live" : "fallback seed (set TMDB_API_KEY)";
+  console.log(`[api] SCRATCH on http://localhost:${port} · ${mode}`);
 });

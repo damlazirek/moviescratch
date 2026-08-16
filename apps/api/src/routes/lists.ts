@@ -1,68 +1,70 @@
 import { Router } from "express";
-
-/** Curated lists — TMDB wiring comes in a later stage. */
-export const CURATED_LISTS = [
-  {
-    id: "imdb-top",
-    name: "IMDb Top 100",
-    slug: "imdb-top",
-    count: 100,
-    description: "The canon. Scratch one. Commit.",
-    mood: "prestige",
-  },
-  {
-    id: "oscar-winners",
-    name: "Oscar Winners",
-    slug: "oscar-winners",
-    count: 48,
-    description: "Gold statues. Fate still chooses.",
-    mood: "ceremony",
-  },
-  {
-    id: "best-horror",
-    name: "Best Horror",
-    slug: "best-horror",
-    count: 40,
-    description: "Lights down. Pulse up.",
-    mood: "horror",
-  },
-  {
-    id: "best-sci-fi",
-    name: "Best Sci-Fi",
-    slug: "best-sci-fi",
-    count: 40,
-    description: "Other worlds. One ticket.",
-    mood: "scifi",
-  },
-  {
-    id: "nolan-essentials",
-    name: "Nolan Essentials",
-    slug: "nolan-essentials",
-    count: 12,
-    description: "Time folds. You scratch.",
-    mood: "nolan",
-  },
-  {
-    id: "90s-classics",
-    name: "90s Classics",
-    slug: "90s-classics",
-    count: 36,
-    description: "VHS energy. Foil destiny.",
-    mood: "retro",
-  },
-] as const;
+import { CURATED_LISTS, getListDef } from "../data/lists.js";
+import { getBatchMovies, getListMovies, getRandomMovie } from "../services/listMovies.js";
+import { getTmdbApiKey } from "../services/tmdb.js";
 
 export const listsRouter = Router();
 
 listsRouter.get("/", (_req, res) => {
-  res.json({ lists: CURATED_LISTS });
+  res.json({
+    lists: CURATED_LISTS.map(({ strategy: _s, ...list }) => list),
+    tmdbConfigured: Boolean(getTmdbApiKey()),
+  });
 });
 
 listsRouter.get("/:id", (req, res) => {
-  const list = CURATED_LISTS.find((item) => item.id === req.params.id);
+  const list = getListDef(req.params.id);
   if (!list) {
     res.status(404).json({ error: "List not found" });
     return;
   }
-  res.json({ list });
+  const { strategy: _s, ...publicList } = list;
+  res.json({ list: publicList });
+});
+
+/** Full poster wall for a list — posters required. */
+listsRouter.get("/:id/movies", async (req, res) => {
+  try {
+    const result = await getListMovies(req.params.id);
+    res.json(result);
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    const message = error instanceof Error ? error.message : "Failed to load movies";
+    res.status(status).json({ error: message });
+  }
+});
+
+listsRouter.get("/:id/random", async (req, res) => {
+  try {
+    const excludeParam = typeof req.query.exclude === "string" ? req.query.exclude : "";
+    const exclude = excludeParam
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const result = await getRandomMovie(req.params.id, exclude);
+    res.json(result);
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    const message = error instanceof Error ? error.message : "Failed to pick movie";
+    res.status(status).json({ error: message });
+  }
+});
+
+listsRouter.get("/:id/batch", async (req, res) => {
+  try {
+    const excludeParam = typeof req.query.exclude === "string" ? req.query.exclude : "";
+    const exclude = excludeParam
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const count = Number(req.query.count) || 12;
+
+    const result = await getBatchMovies(req.params.id, count, exclude);
+    res.json(result);
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    const message = error instanceof Error ? error.message : "Failed to load sheet";
+    res.status(status).json({ error: message });
+  }
 });
